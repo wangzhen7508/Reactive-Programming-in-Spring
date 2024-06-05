@@ -6,7 +6,6 @@ import org.rpis5.chapters.chapter_01.commons.Output;
 import java.util.function.Consumer;
 
 public class AsyncShoppingCardService implements ShoppingCardService {
-
     @Override
     public void calculate(Input value, Consumer<Output> c) {
         // blocking operation is presented, better to provide answer asynchronously

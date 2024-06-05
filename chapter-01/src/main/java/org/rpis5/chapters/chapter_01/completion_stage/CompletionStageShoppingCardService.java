@@ -7,10 +7,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 public class CompletionStageShoppingCardService implements ShoppingCardService {
-
     @Override
     public CompletionStage<Output> calculate(Input value) {
-
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Thread.sleep(1000);

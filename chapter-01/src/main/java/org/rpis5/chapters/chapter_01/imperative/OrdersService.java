@@ -4,7 +4,6 @@ import org.rpis5.chapters.chapter_01.commons.Input;
 import org.rpis5.chapters.chapter_01.commons.Output;
 
 public class OrdersService {
-
     private final ShoppingCardService scService;
 
     public OrdersService(ShoppingCardService scService) {

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("api/v2/resource/b")
 public class AsyncServiceTwo {
-
     @GetMapping
     public ExamplesCollection process() throws InterruptedException {
         Thread.sleep(1000);
