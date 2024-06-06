@@ -27,48 +27,48 @@ import static java.lang.String.format;
 
 @RestController
 public class TemperatureController {
-   static final long SSE_SESSION_TIMEOUT = 30 * 60 * 1000L;
-   private static final Logger log = LoggerFactory.getLogger(TemperatureController.class);
+    static final long SSE_SESSION_TIMEOUT = 30 * 60 * 1000L;
+    private static final Logger log = LoggerFactory.getLogger(TemperatureController.class);
 
-   private final Set<SseEmitter> clients = new CopyOnWriteArraySet<>();
+    private final Set<SseEmitter> clients = new CopyOnWriteArraySet<>();
 
-   @RequestMapping(value = "/temperature-stream", method = RequestMethod.GET)
-   public SseEmitter events(HttpServletRequest request) {
-      log.info("SSE stream opened for client: " + request.getRemoteAddr());
-      SseEmitter emitter = new SseEmitter(SSE_SESSION_TIMEOUT);
-      clients.add(emitter);
+    @RequestMapping(value = "/temperature-stream", method = RequestMethod.GET)
+    public SseEmitter events(HttpServletRequest request) {
+        log.info("SSE stream opened for client: " + request.getRemoteAddr());
+        SseEmitter emitter = new SseEmitter(SSE_SESSION_TIMEOUT);
+        clients.add(emitter);
 
-      // Remove SseEmitter from active clients on error or client disconnect
-      emitter.onTimeout(() -> clients.remove(emitter));
-      emitter.onCompletion(() -> clients.remove(emitter));
+        // Remove SseEmitter from active clients on error or client disconnect
+        emitter.onTimeout(() -> clients.remove(emitter));
+        emitter.onCompletion(() -> clients.remove(emitter));
 
-      return emitter;
-   }
+        return emitter;
+    }
 
-   @Async
-   @EventListener
-   public void handleMessage(Temperature temperature) {
-      log.info(format("Temperature: %4.2f C, active subscribers: %d",
-         temperature.getValue(), clients.size()));
+    @Async
+    @EventListener
+    public void handleMessage(Temperature temperature) {
+        log.info(format("Temperature: %4.2f C, active subscribers: %d",
+                temperature.getValue(), clients.size()));
 
-      List<SseEmitter> deadEmitters = new ArrayList<>();
-      clients.forEach(emitter -> {
-         try {
-            Instant start = Instant.now();
-            emitter.send(temperature, MediaType.APPLICATION_JSON);
-            log.info("Sent to client, took: {}", Duration.between(start, Instant.now()));
-         } catch (Exception ignore) {
-            deadEmitters.add(emitter);
-         }
-      });
-      clients.removeAll(deadEmitters);
-   }
+        List<SseEmitter> deadEmitters = new ArrayList<>();
+        clients.forEach(emitter -> {
+            try {
+                Instant start = Instant.now();
+                emitter.send(temperature, MediaType.APPLICATION_JSON);
+                log.info("Sent to client, took: {}", Duration.between(start, Instant.now()));
+            } catch (Exception ignore) {
+                deadEmitters.add(emitter);
+            }
+        });
+        clients.removeAll(deadEmitters);
+    }
 
-   @ExceptionHandler(value = AsyncRequestTimeoutException.class)
-   public ModelAndView handleTimeout(HttpServletResponse rsp) throws IOException {
-      if (!rsp.isCommitted()) {
-         rsp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
-      }
-      return new ModelAndView();
-   }
+    @ExceptionHandler(value = AsyncRequestTimeoutException.class)
+    public ModelAndView handleTimeout(HttpServletResponse rsp) throws IOException {
+        if (!rsp.isCommitted()) {
+            rsp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+        }
+        return new ModelAndView();
+    }
 }

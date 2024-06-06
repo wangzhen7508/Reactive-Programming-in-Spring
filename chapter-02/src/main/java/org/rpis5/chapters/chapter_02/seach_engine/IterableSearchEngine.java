@@ -4,5 +4,5 @@ import java.net.URL;
 
 @SuppressWarnings("unused")
 public interface IterableSearchEngine {
-   Iterable<URL> search(String query, int limit);
+    Iterable<URL> search(String query, int limit);
 }
