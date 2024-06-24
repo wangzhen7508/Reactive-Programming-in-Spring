@@ -7,29 +7,28 @@ import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
 public final class AsyncAdapters {
+    public static <T> CompletionStage<T> toCompletion(ListenableFuture<T> future) {
+        CompletableFuture<T> completableFuture = new CompletableFuture<>();
 
-	public static <T> CompletionStage<T> toCompletion(ListenableFuture<T> future) {
+        future.addCallback(
+                completableFuture::complete,
+                completableFuture::completeExceptionally);
 
-		CompletableFuture<T> completableFuture = new CompletableFuture<>();
+        return completableFuture;
+    }
 
-		future.addCallback(completableFuture::complete,
-				completableFuture::completeExceptionally);
+    public static <T> ListenableFuture<T> toListenable(CompletionStage<T> stage) {
+        SettableListenableFuture<T> future = new SettableListenableFuture<>();
 
-		return completableFuture;
-	}
+        stage.whenComplete((v, t) -> {
+            if (t == null) {
+                future.set(v);
+            }
+            else {
+                future.setException(t);
+            }
+        });
 
-	public static <T> ListenableFuture<T> toListenable(CompletionStage<T> stage) {
-		SettableListenableFuture<T> future = new SettableListenableFuture<>();
-
-		stage.whenComplete((v, t) -> {
-			if (t == null) {
-				future.set(v);
-			}
-			else {
-				future.setException(t);
-			}
-		});
-
-		return future;
-	}
+        return future;
+    }
 }

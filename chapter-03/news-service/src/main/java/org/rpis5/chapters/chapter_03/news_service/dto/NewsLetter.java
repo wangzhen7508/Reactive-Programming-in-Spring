@@ -4,16 +4,15 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
-import lombok.experimental.Wither;
+import lombok.With;
 
 import java.util.Collection;
 
 @Data(staticConstructor = "of")
 @Builder(builderClassName = "NewsLetterTemplate", builderMethodName = "template")
 @AllArgsConstructor
-@Wither
+@With
 public class NewsLetter {
-
     private final @NonNull String title;
     private final          String recipient;
     private final @NonNull Collection<News> digest;

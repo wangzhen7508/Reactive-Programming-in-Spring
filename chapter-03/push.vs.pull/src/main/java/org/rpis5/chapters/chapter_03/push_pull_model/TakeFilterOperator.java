@@ -11,210 +11,208 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 public class TakeFilterOperator<T> implements Publisher<T> {
+    private final Publisher<T> source;
+    private final int          take;
+    private final Predicate<T> predicate;
 
-	private final Publisher<T> source;
-	private final int          take;
-	private final Predicate<T> predicate;
+    public TakeFilterOperator(Publisher<T> source, int take, Predicate<T> predicate) {
+        this.source = source;
+        this.take = take;
+        this.predicate = predicate;
+    }
 
-	public TakeFilterOperator(Publisher<T> source, int take, Predicate<T> predicate) {
-		this.source = source;
-		this.take = take;
-		this.predicate = predicate;
-	}
+    public void subscribe(Subscriber s) {
+        source.subscribe(new TakeFilterInner<>(s, take, predicate));
+    }
 
-	public void subscribe(Subscriber s) {
-		source.subscribe(new TakeFilterInner<>(s, take, predicate));
-	}
+    static final class TakeFilterInner<T> implements Subscriber<T>, Subscription {
+        final Subscriber<T> actual;
+        final int           take;
+        final Predicate<T>  predicate;
+        final Queue<T>      queue;
 
-	static final class TakeFilterInner<T> implements Subscriber<T>, Subscription {
+        Subscription current;
+        int          remaining;
+        int          filtered;
+        Throwable    throwable;
+        boolean      done;
 
-		final Subscriber<T> actual;
-		final int           take;
-		final Predicate<T>  predicate;
-		final Queue<T>      queue;
+        volatile long requested;
+        static final AtomicLongFieldUpdater<TakeFilterInner> REQUESTED =
+                AtomicLongFieldUpdater.newUpdater(TakeFilterInner.class, "requested");
 
-		Subscription current;
-		int          remaining;
-		int          filtered;
-		Throwable    throwable;
-		boolean      done;
+        volatile int wip;
+        static final AtomicIntegerFieldUpdater<TakeFilterInner> WIP =
+                AtomicIntegerFieldUpdater.newUpdater(TakeFilterInner.class, "wip");
 
-		volatile long requested;
-		static final AtomicLongFieldUpdater<TakeFilterInner> REQUESTED =
-				AtomicLongFieldUpdater.newUpdater(TakeFilterInner.class, "requested");
+        TakeFilterInner(Subscriber<T> actual, int take, Predicate<T> predicate) {
+            this.actual = actual;
+            this.take = take;
+            this.remaining = take;
+            this.predicate = predicate;
+            this.queue = new ConcurrentLinkedQueue<>();
+        }
 
-		volatile int wip;
-		static final AtomicIntegerFieldUpdater<TakeFilterInner> WIP =
-				AtomicIntegerFieldUpdater.newUpdater(TakeFilterInner.class, "wip");
+        public void onSubscribe(Subscription current) {
+            if (this.current == null) {
+                this.current = current;
 
-		TakeFilterInner(Subscriber<T> actual, int take, Predicate<T> predicate) {
-			this.actual = actual;
-			this.take = take;
-			this.remaining = take;
-			this.predicate = predicate;
-			this.queue = new ConcurrentLinkedQueue<>();
-		}
+                this.actual.onSubscribe(this);
+                if (take > 0) {
+                    this.current.request(take);
+                } else {
+                    onComplete();
+                }
+            }
+            else {
+                current.cancel();
+            }
+        }
 
-		public void onSubscribe(Subscription current) {
-			if (this.current == null) {
-				this.current = current;
+        public void onNext(T element) {
+            if (done) {
+                return;
+            }
 
-				this.actual.onSubscribe(this);
-				if (take > 0) {
-					this.current.request(take);
-				} else {
-					onComplete();
-				}
-			}
-			else {
-				current.cancel();
-			}
-		}
+            long r = requested;
+            Subscriber<T> a = actual;
+            Subscription s = current;
 
-		public void onNext(T element) {
-			if (done) {
-				return;
-			}
+            if (remaining > 0) {
+                boolean isValid = predicate.test(element);
+                boolean isEmpty = queue.isEmpty();
 
-			long r = requested;
-			Subscriber<T> a = actual;
-			Subscription s = current;
+                if (isValid && r > 0 && isEmpty) {
+                    a.onNext(element);
+                    remaining--;
 
-			if (remaining > 0) {
-				boolean isValid = predicate.test(element);
-				boolean isEmpty = queue.isEmpty();
+                    REQUESTED.decrementAndGet(this);
+                    if (remaining == 0) {
+                        s.cancel();
+                        onComplete();
+                    }
+                }
+                else if (isValid && (r == 0 || !isEmpty)) {
+                    queue.offer(element);
+                    remaining--;
 
-				if (isValid && r > 0 && isEmpty) {
-					a.onNext(element);
-					remaining--;
+                    if (remaining == 0) {
+                        s.cancel();
+                        onComplete();
+                    }
+                    drain(a, r);
+                }
+                else if (!isValid) {
+                    filtered++;
+                }
+            }
+            else {
+                s.cancel();
+                onComplete();
+            }
 
-					REQUESTED.decrementAndGet(this);
-					if (remaining == 0) {
-						s.cancel();
-						onComplete();
-					}
-				}
-				else if (isValid && (r == 0 || !isEmpty)) {
-					queue.offer(element);
-					remaining--;
+            if (filtered > 0 && remaining / filtered < 2) {
+                s.request(take);
+                filtered = 0;
+            }
+        }
 
-					if (remaining == 0) {
-						s.cancel();
-						onComplete();
-					}
-					drain(a, r);
-				}
-				else if (!isValid) {
-					filtered++;
-				}
-			}
-			else {
-				s.cancel();
-				onComplete();
-			}
+        @Override
+        public void onError(Throwable t) {
+            if (done) {
+                return;
+            }
 
-			if (filtered > 0 && remaining / filtered < 2) {
-				s.request(take);
-				filtered = 0;
-			}
-		}
+            done = true;
 
-		@Override
-		public void onError(Throwable t) {
-			if (done) {
-				return;
-			}
+            if (queue.isEmpty()) {
+                actual.onError(t);
+            }
+            else {
+                throwable = t;
+            }
+        }
 
-			done = true;
+        @Override
+        public void onComplete() {
+            if (done) {
+                return;
+            }
 
-			if (queue.isEmpty()) {
-				actual.onError(t);
-			}
-			else {
-				throwable = t;
-			}
-		}
+            done = true;
 
-		@Override
-		public void onComplete() {
-			if (done) {
-				return;
-			}
+            if (queue.isEmpty()) {
+                actual.onComplete();
+            }
+        }
 
-			done = true;
+        @Override
+        public void request(long n) {
+            if (n <= 0) {
+                onError(new IllegalArgumentException(
+                        "Spec. Rule 3.9 - Cannot request a non strictly positive number: " + n
+                ));
+            }
 
-			if (queue.isEmpty()) {
-				actual.onComplete();
-			}
-		}
+            drain(actual, SubscriptionUtils.request(n, this, REQUESTED));
+        }
 
-		@Override
-		public void request(long n) {
-			if (n <= 0) {
-				onError(new IllegalArgumentException(
-					"Spec. Rule 3.9 - Cannot request a non strictly positive number: " + n
-				));
-			}
+        @Override
+        public void cancel() {
+            if (!done) {
+                current.cancel();
+            }
 
-			drain(actual, SubscriptionUtils.request(n, this, REQUESTED));
-		}
+            queue.clear();
+        }
 
-		@Override
-		public void cancel() {
-			if (!done) {
-				current.cancel();
-			}
+        void drain(Subscriber<T> a, long r) {
+            if (queue.isEmpty() || r == 0) {
+                return;
+            }
 
-			queue.clear();
-		}
+            int wip;
 
-		void drain(Subscriber<T> a, long r) {
-			if (queue.isEmpty() || r == 0) {
-				return;
-			}
+            if ((wip = WIP.incrementAndGet(this)) > 1) {
+                return;
+            }
 
-			int wip;
+            int c = 0;
+            boolean empty;
 
-			if ((wip = WIP.incrementAndGet(this)) > 1) {
-				return;
-			}
-
-			int c = 0;
-			boolean empty;
-
-			for (;;) {
-				T e;
-				while (c != r && (e = queue.poll()) != null) {
-					a.onNext(e);
-					c++;
-				}
+            for (;;) {
+                T e;
+                while (c != r && (e = queue.poll()) != null) {
+                    a.onNext(e);
+                    c++;
+                }
 
 
-				empty = queue.isEmpty();
-				r = REQUESTED.addAndGet(this, -c);
-				c = 0;
+                empty = queue.isEmpty();
+                r = REQUESTED.addAndGet(this, -c);
+                c = 0;
 
-				if (r == 0 || empty) {
-					if (done && empty) {
-						if (throwable == null) {
-							a.onComplete();
-						}
-						else {
-							a.onError(throwable);
-						}
-						return;
-					}
+                if (r == 0 || empty) {
+                    if (done && empty) {
+                        if (throwable == null) {
+                            a.onComplete();
+                        }
+                        else {
+                            a.onError(throwable);
+                        }
+                        return;
+                    }
 
-					wip = WIP.addAndGet(this, -wip);
+                    wip = WIP.addAndGet(this, -wip);
 
-					if (wip == 0) {
-						return;
-					}
-				}
-				else {
-					wip = this.wip;
-				}
-			}
-		}
-	}
+                    if (wip == 0) {
+                        return;
+                    }
+                }
+                else {
+                    wip = this.wip;
+                }
+            }
+        }
+    }
 }                                                                  

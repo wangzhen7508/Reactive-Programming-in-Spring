@@ -10,36 +10,35 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 
 public class NewsServicePublisher implements Publisher<NewsLetter> {
+    final SmartMulticastProcessor processor;
 
-	final SmartMulticastProcessor processor;
+    public NewsServicePublisher(MongoClient client, String categoryOfInterests) {
+        ScheduledPublisher<NewsLetter> scheduler = new ScheduledPublisher<>(
+                () -> new NewsPreparationOperator(
+                        new DBPublisher(
+                                client.getDatabase("news")
+                                        .getCollection("news", News.class),
+                                categoryOfInterests
+                        ),
+                        "Some Digest"
+                ),
+                1, TimeUnit.DAYS
+        );
 
-	public NewsServicePublisher(MongoClient client, String categoryOfInterests) {
-		ScheduledPublisher<NewsLetter> scheduler = new ScheduledPublisher<>(
-				() -> new NewsPreparationOperator(
-						new DBPublisher(
-								client.getDatabase("news")
-								      .getCollection("news", News.class),
-								categoryOfInterests
-						),
-						"Some Digest"
-				),
-				1, TimeUnit.DAYS
-		);
+        SmartMulticastProcessor processor = new SmartMulticastProcessor();
+        scheduler.subscribe(processor);
 
-		SmartMulticastProcessor processor = new SmartMulticastProcessor();
-		scheduler.subscribe(processor);
+        this.processor = processor;
+    }
 
-		this.processor = processor;
-	}
+    public NewsServicePublisher(Consumer<SmartMulticastProcessor> setup) {
+        this.processor = new SmartMulticastProcessor();
 
-	public NewsServicePublisher(Consumer<SmartMulticastProcessor> setup) {
-		this.processor = new SmartMulticastProcessor();
+        setup.accept(processor);
+    }
 
-		setup.accept(processor);
-	}
-
-	@Override
-	public void subscribe(Subscriber<? super NewsLetter> s) {
-		processor.subscribe(s);
-	}
+    @Override
+    public void subscribe(Subscriber<? super NewsLetter> s) {
+        processor.subscribe(s);
+    }
 }

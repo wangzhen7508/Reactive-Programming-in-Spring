@@ -17,7 +17,6 @@ public final class SubscriptionUtils {
         return cap;
     }
 
-
     @SuppressWarnings("unchecked")
     public static long request(long n, Object instance, AtomicLongFieldUpdater updater) {
         for (;;) {

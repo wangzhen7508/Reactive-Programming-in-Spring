@@ -14,7 +14,6 @@ import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Publisher;
 
 public class AdapterExample {
-
     public static void main(String[] args) {
         Flow.Publisher jdkPublisher = FlowAdapters.toFlowPublisher(new NewsServicePublisher(smp ->
             Flowable.intervalRange(0, 10, 0, 10, TimeUnit.MILLISECONDS, Schedulers.computation())
@@ -31,8 +30,6 @@ public class AdapterExample {
 
         NewsServiceSubscriber newsServiceSubscriber = new NewsServiceSubscriber(2);
         jdkPublisher2.subscribe(FlowAdapters.toFlowSubscriber(newsServiceSubscriber));
-
-
 
         while (true) {
             Optional<NewsLetter> letterOptional = newsServiceSubscriber.eventuallyReadDigest();

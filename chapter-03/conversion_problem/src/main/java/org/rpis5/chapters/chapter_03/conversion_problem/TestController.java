@@ -6,10 +6,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class TestController {
-
-	@RequestMapping(value = "/hello", produces = MediaType.TEXT_PLAIN_VALUE)
-	public String hello() {
-		return "Hello World";
-	}
-
+    @RequestMapping(value = "/hello", produces = MediaType.TEXT_PLAIN_VALUE)
+    public String hello() {
+        return "Hello World";
+    }
 }

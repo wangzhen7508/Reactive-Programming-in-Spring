@@ -11,7 +11,6 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 public class NewsServiceSubscriber implements Subscriber<NewsLetter> {
-
     final Queue<NewsLetter> mailbox   = new ConcurrentLinkedQueue<>();
     final AtomicInteger     remaining = new AtomicInteger();
     final int               take;

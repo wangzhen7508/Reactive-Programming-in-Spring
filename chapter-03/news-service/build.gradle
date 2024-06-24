@@ -45,7 +45,7 @@ dependencies {
     compile('org.reactivestreams:reactive-streams-flow-adapters:1.0.2')
     compile('io.ratpack:ratpack-spring-boot-starter:1.5.4')
 
-    compileOnly('org.projectlombok:lombok:1.18.2')
+    compileOnly('org.projectlombok:lombok:1.18.30')
     testCompile('org.reactivestreams:reactive-streams-tck:1.0.2')
     testCompile('org.springframework.boot:spring-boot-starter-test')
 }
